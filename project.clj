@@ -9,4 +9,5 @@
                  [org.clojure/math.combinatorics "0.1.4"]
                  [com.gearswithingears/async-sockets "0.1.0"]]
   :repl-options {:init-ns user}
+  :jvm-opts ["-Xmx6g" "-Xms6g"] 
   :profiles {:dev {:source-paths ["dev"]}})
