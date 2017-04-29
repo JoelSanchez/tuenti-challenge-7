@@ -1,9 +1,33 @@
 (ns tuentichallenge.challenge6.core
   (:require [clojure.data.priority-map :refer [priority-map]]))
 
+(defn indices [pred coll]
+   (keep-indexed #(when (pred %2) %1) coll))
+
+(defn gauss [a z]
+  (/ (* (inc (- z a)) (+ a z)) 2))
+
 (defn get-distances [case floor way distance]
-  (-> (if (> floor 1) {(dec floor) distance} {})
-      ((fn [m] (if-not (= floor (:max-floor case)) (assoc m (inc floor) (+ distance floor)))))
+  (-> {}
+      ;; link to next floor worth processing (next shortcut source or final floor)
+      ((fn [m]
+        (if-not (= floor (:max-floor case))
+          (let [next-shortcut-idx (first (indices #(< floor %) (:shortcut-keys case)))
+                next-shortcut-floor (get (:shortcut-keys case) next-shortcut-idx)]
+            (if next-shortcut-floor
+              (assoc m next-shortcut-floor (+ distance (gauss floor (- next-shortcut-floor 1))))
+              (assoc m (:max-floor case) (+ distance (gauss floor (- (:max-floor case) 1))))))
+          m)))
+      ;; link to prev floor worth processing (prev shortcut source or first floor)
+      ((fn [m]
+        (if-not (<= floor 1)
+          (let [prev-shortcut-idx (first (indices #(> floor %) (:shortcut-keys-r case)))
+                prev-shortcut-floor (get (:shortcut-keys-r case) prev-shortcut-idx)]
+            (if prev-shortcut-floor
+              (assoc m prev-shortcut-floor distance)
+              (assoc m 1 distance)))
+          m)))
+      ;; apply shortcuts
       ((fn [m] (reduce  (fn [acc [idx v]]
                           (if-let [s-val (get m idx)]
                             (assoc acc idx (min s-val (+ v distance)))
@@ -15,12 +39,10 @@
 
 (defn dijkstra [case start target]
   (loop [q (priority-map start 0) r {}]
-    ; (println "r" r)
     (when-let [[v d] (peek q)]
       (if (= v target)
         d
         (let [dists (remove-keys r (get-distances case v r d))]
-          ; (println "dists" dists) (println)
           (recur (merge-with min (pop q) dists) (assoc r v d)))))))
 
 (defn process-shortcuts [shortcuts]
@@ -50,11 +72,14 @@
       (let [line (read-string (str "[" raw-line "]"))
             base-case {:max-floor (first line) :shortcuts (last line)}
             raw-shortcuts (map (fn [i] (read-string (str "[" (nth lines (+ 1 idx i)) "]"))) (range (:shortcuts base-case)))
-            case (assoc base-case :shortcuts (process-shortcuts raw-shortcuts))]
+            shortcuts (process-shortcuts raw-shortcuts)
+            shortcut-keys (vec (sort (keys shortcuts)))
+            case (-> base-case (assoc :shortcuts shortcuts) (assoc :shortcut-keys shortcut-keys) (assoc :shortcut-keys-r (vec (reverse shortcut-keys))))]
         (recur (conj cases case) (+ idx (count raw-shortcuts) 1)))
       cases)))
 
 (defn challenge-from-file [input output]
+  (reset! case-idx 0)
 	(with-open [rdr (clojure.java.io/reader input)]
     (doall
-      (spit output (clojure.string/join "\n" (pmap process-case (process-lines (vec (line-seq rdr)))))))))
+      (spit output (clojure.string/join "\n" (map process-case (process-lines (vec (line-seq rdr)))))))))
