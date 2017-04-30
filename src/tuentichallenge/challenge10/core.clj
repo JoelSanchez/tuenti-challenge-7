@@ -13,13 +13,21 @@
         raw (.digest algorithm (.getBytes s))]
     (format "%032x" (BigInteger. 1 raw))))
 
+(declare php-password)
+
 (defn php-counter [seed secret1 secret2]
   (println "php-counter" seed)
   (time
-  (loop [idx 0 acc seed]
-    (if (= idx 10000000)
-      acc
-      (recur (inc idx) (mod (* acc secret1) secret2))))))
+  (loop [idx 0 steps 900 acc seed]
+    (cond
+      (= idx 10000000) (if (= steps 0)
+                          acc
+                          (recur 0 (dec steps)
+                            (do
+                              (println (crc32 (md5 (str acc)))
+                                      (md5 (php-password acc secret1 secret2)))
+                              (crc32 (md5 (php-password acc secret1 secret2))))))
+      :else (recur (inc idx) steps (mod (* acc secret1) secret2))))))
 
 (defn php-password [counter secret1 secret2]
   (loop [idx 0 acc "" counter (mod (* counter secret1) secret2)]
@@ -35,7 +43,7 @@
     (println "user" user "pwd-hash" pwd-hash)
     (let [secret1 6533205
           secret2 2340262
-          counter-seed (if pwd-hash (crc32 pwd-hash) (crc32 user))
+          counter-seed (if pwd-hash (do (println (crc32 pwd-hash)) (crc32 pwd-hash)) (crc32 user))
           counter (php-counter counter-seed secret1 secret2)
           password (php-password counter secret1 secret2)]
       ; (println "using counter" counter)
