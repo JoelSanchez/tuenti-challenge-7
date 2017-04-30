@@ -30,12 +30,12 @@
                (mod (* counter secret1) secret2)))))
 
 (defn php-implementation
-  ([user] (php-implementation user ""))
+  ([user] (php-implementation user nil))
   ([user pwd-hash]
     (println "user" user "pwd-hash" pwd-hash)
     (let [secret1 6533205
           secret2 2340262
-          counter-seed (if (count pwd-hash) (crc32 pwd-hash) (crc32 user))
+          counter-seed (if pwd-hash (crc32 pwd-hash) (crc32 user))
           counter (php-counter counter-seed secret1 secret2)
           password (php-password counter secret1 secret2)]
       ; (println "using counter" counter)
