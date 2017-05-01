@@ -1,8 +1,28 @@
 (ns tuentichallenge.challenge10.core
-  (:require [clojure.java.shell :refer [sh]]
-            [clj-time.core :as t]
-            [clj-time.format :as f]))
+  (:require [clj-time.core :as t]
+            [clojure.java.io :as io]
+            [clj-time.format :as f])
+  (:import [java.io File]))
 
+;;
+;; Dates
+;;
+(defn make-date [s]
+  (f/parse (f/formatters :year-month-day) s))
+
+(defn next-date [date]
+  (t/plus date (t/days 1)))
+
+(defn prev-date [date]
+  (t/minus date (t/days 1)))
+
+(defn print-date [d]
+  (f/unparse (f/formatter "yyyy-MM-dd") d))
+
+
+;;
+;; Clojure implementation of script.php
+;;
 (defn crc32 [s]
   (let [CRC (new java.util.zip.CRC32)]
     (. CRC update (. s getBytes))
@@ -13,22 +33,6 @@
         raw (.digest algorithm (.getBytes s))]
     (format "%032x" (BigInteger. 1 raw))))
 
-(declare php-password)
-
-(defn php-counter [seed secret1 secret2]
-  (println "php-counter" seed)
-  (time
-  (loop [idx 0 steps 900 acc seed]
-    (cond
-      (= idx 10000000) (if (= steps 0)
-                          acc
-                          (recur 0 (dec steps)
-                            (do
-                              (println (crc32 (md5 (str acc)))
-                                      (md5 (php-password acc secret1 secret2)))
-                              (crc32 (md5 (php-password acc secret1 secret2))))))
-      :else (recur (inc idx) steps (mod (* acc secret1) secret2))))))
-
 (defn php-password [counter secret1 secret2]
   (loop [idx 0 acc "" counter (mod (* counter secret1) secret2)]
       (if (= idx 10)
@@ -37,60 +41,58 @@
                (str acc (char (+ (mod counter 94) 33)))
                (mod (* counter secret1) secret2)))))
 
+(defn modpow [n exp m]
+  (-> (biginteger n) (.modPow (biginteger exp) (biginteger m))))
+
+(defn php-counter [seed secret1 secret2]
+  (mod (* seed (modpow secret1 10000000 secret2)) secret2))
+
 (defn php-implementation
-  ([user] (php-implementation user nil))
-  ([user pwd-hash]
-    (println "user" user "pwd-hash" pwd-hash)
-    (let [secret1 6533205
-          secret2 2340262
-          counter-seed (if pwd-hash (do (println (crc32 pwd-hash)) (crc32 pwd-hash)) (crc32 user))
+  ([secret1 secret2 user] (php-implementation secret1 secret2 user nil))
+  ([secret1 secret2 user pwd-hash]
+    (let [counter-seed (if pwd-hash (crc32 pwd-hash) (crc32 user))
           counter (php-counter counter-seed secret1 secret2)
           password (php-password counter secret1 secret2)]
-      ; (println "using counter" counter)
-      [password (md5 password)])))
+      {:password password :hash (md5 password)})))
 
-(defn call-script
-  ([user pwd-hash]
-    (println "call-script " user "pwd-hash" pwd-hash)
-    (apply sh "resources/challenge10/script.php" (filter not-empty [user pwd-hash])))
-  ([user]
-    (call-script user nil)))
 
-(def a {:user "aaaaaa",
-  :dates
-  ["2017-01-31"]})
 
-(def b {:user "xoajoj",
-  :dates
-  ["2013-05-19" "2016-08-20"]})
+(defn find-files*
+  "Find files in `path` by `pred`."
+  [path pred]
+  (filter pred (-> path io/file file-seq)))
 
-(def raw-dates ["2013-05-19 2" "2016-08-20 1"])
+(defn find-files
+  "Find files matching given `pattern`."
+  [path pattern]
+  (find-files* path #(re-matches pattern (.getName ^File %))))
 
-(comment (defn solve-case [{:keys [user dates] :as case}]
-  (loop [dates dates last-hash [] last-date nil]
-    (let [next-list-date (first dates)
-          next-natural-date (t/plus (f/parse (f/formatters :year-month-day) last-date) (t/days 1))]
-      (println "last-hash" last-hash "last-date" last-date "next-list-date" next-list-date "next-natural-date" next-natural-date)
-      (recur (rest dates) (php-implementation user last-hash)))
+(defn secret-from-line [s]
+  (-> s (clojure.string/replace #"\$secret[0-9] = " "") (clojure.string/replace #";" "") (read-string)))
 
-      )))
+(defn get-secrets []
+  (let [files (find-files "resources/challenge10/versions" (re-pattern (str ".*?" "script\\.php")))]
+    (into {} (doall (map (fn [file]
+                            (with-open [rdr (clojure.java.io/reader file)]
+                              (let [lines (line-seq rdr)
+                                    secrets (map secret-from-line [(nth lines 6) (nth lines 7)])
+                                    date (clojure.string/replace (.getName file) #"\.script\.php" "")]
+                                [date secrets]))) files)))))
 
-(defn solve-case [{:keys [user dates] :as case}])
+(def secrets (get-secrets))
 
-(defn next-date [date]
-  (t/plus date (t/days 1)))
 
-(defn make-date [s]
-  (f/parse (f/formatters :year-month-day) s))
+(defn solve-case-date [date user {:keys [hash]}]
+  (let [[secret1 secret2] (get secrets (print-date date))]
+    (php-implementation secret1 secret2 user hash)))
 
-(defn fill-missing-dates [dates]
-  (loop [remaining (rest dates) result [(first dates)]]
-    (let [nxt (next-date (first result))]
-      (recur remaining (conj nxt)))))
-
+(defn solve-case [{:keys [user dates] :as case}]
+  (reduce (fn [acc date] (solve-case-date date user acc)) nil dates))
 
 (defn process-case [idx case]
-  (str "Case #" idx ": " (solve-case case)))
+  (let [result (solve-case case)]
+    (println "processing case " (inc idx) result)
+    (str "Case #" (inc idx) ": " (:password result))))
 
 (defn process-dates [dates]
   (apply concat (map (fn [i]
@@ -108,7 +110,6 @@
             n-dates (read-string (get raw-line 1))
             last-date-index (+ (int n-dates) (inc idx))
             dates (subvec lines (inc idx) last-date-index)]
-        (println "idx" idx "last-date-index" last-date-index)
         (recur last-date-index 
                (conj acc {:user user :dates (process-dates dates)}))))))
 
@@ -116,8 +117,5 @@
   (with-open [rdr (clojure.java.io/reader input)]
     (doall
       (let [lines (process-lines (vec (drop 1 (line-seq rdr))))]
-        (println "Lines")
-        (clojure.pprint/pprint lines)
-        (println)
-        ;(spit output (clojure.string/join "\n" (map-indexed process-case lines)))
+        (spit output (clojure.string/join "\n" (map-indexed process-case lines)))
         ))))
