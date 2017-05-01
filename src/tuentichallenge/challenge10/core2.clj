@@ -34,10 +34,13 @@
 (defn solve-case [{:keys [user dates] :as case}]
   (reduce (fn [acc date] (solve-case-date date user acc)) nil dates))
 
-(defn process-case [idx case]
-  (println "processing case " idx)
+(def case-idx (atom 0))
+
+(defn process-case [case]
+  (swap! case-idx inc)
+  (println "processing case " @case-idx)
   (let [result (solve-case case)]
-    (str "Case #" (inc idx) ": " (:password result))))
+    (str "Case #" @case-idx ": " (:password result))))
 
 (defn process-dates [dates]
   (apply concat (map (fn [i]
@@ -62,5 +65,7 @@
   (with-open [rdr (clojure.java.io/reader input)]
     (doall
       (let [lines (process-lines (vec (drop 1 (line-seq rdr))))]
-        (spit output (clojure.string/join "\n" (map-indexed process-case lines)))
+        ;; using println with pmap is a recipe for garbled output,
+        ;; but i did not care in this case (performance > perfect console output)
+        (spit output (clojure.string/join "\n" (pmap process-case lines)))
         ))))

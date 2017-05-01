@@ -1,5 +1,11 @@
 #!/bin/bash
 
+#
+# Modified version of:
+# http://stackoverflow.com/questions/12850030/git-getting-all-previous-version-of-a-specific-file-folder
+# for the purposes of the challenge
+# 
+
 # we'll write all git versions of the file to this folder:
 EXPORT_TO=/tmp/all_versions_exported
 
