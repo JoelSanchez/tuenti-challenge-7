@@ -1,8 +1,12 @@
 (ns tuentichallenge.challenge10.core2
-  (:require [clojure.java.shell :refer [sh]]
-            [clj-time.core :as t]
-            [clj-time.format :as f]))
+  (:require [clj-time.core :as t]
+            [clojure.java.io :as io]
+            [clj-time.format :as f])
+  (:import [java.io File]))
 
+;;
+;; Dates
+;;
 (defn make-date [s]
   (f/parse (f/formatters :year-month-day) s))
 
@@ -15,32 +19,80 @@
 (defn print-date [d]
   (f/unparse (f/formatter "yyyy-MM-dd") d))
 
-(defn call-script
-  ([date user pwd-hash]
-    (println "call-script user " user "date" date "pwd-hash" pwd-hash)
-    (try
-      (apply sh (str "resources/challenge10/versions/" date ".script.php") (filter not-empty [user pwd-hash]))
-      (catch Exception e
-        (println (.getMessage e))
-        )))
-  ([date user]
-    (call-script date user nil)))
+
+;;
+;; Clojure implementation of script.php
+;;
+(defn crc32 [s]
+  (let [CRC (new java.util.zip.CRC32)]
+    (. CRC update (. s getBytes))
+    (. CRC getValue)))
+
+(defn md5 [s]
+  (let [algorithm (java.security.MessageDigest/getInstance "MD5")
+        raw (.digest algorithm (.getBytes s))]
+    (format "%032x" (BigInteger. 1 raw))))
+
+(defn php-password [counter secret1 secret2]
+  (loop [idx 0 acc "" counter (mod (* counter secret1) secret2)]
+      (if (= idx 10)
+        acc
+        (recur (inc idx)
+               (str acc (char (+ (mod counter 94) 33)))
+               (mod (* counter secret1) secret2)))))
+
+(defn modpow [n exp m]
+  (-> (biginteger n) (.modPow (biginteger exp) (biginteger m))))
+
+(defn php-counter [seed secret1 secret2]
+  (mod (* seed (modpow secret1 10000000 secret2)) secret2))
+
+(defn php-implementation
+  ([secret1 secret2 user] (php-implementation secret1 secret2 user nil))
+  ([secret1 secret2 user pwd-hash]
+    (let [counter-seed (if pwd-hash (crc32 pwd-hash) (crc32 user))
+          counter (php-counter counter-seed secret1 secret2)
+          password (php-password counter secret1 secret2)]
+      {:password password :hash (md5 password)})))
+
+
+
+(defn find-files*
+  "Find files in `path` by `pred`."
+  [path pred]
+  (filter pred (-> path io/file file-seq)))
+
+(defn find-files
+  "Find files matching given `pattern`."
+  [path pattern]
+  (find-files* path #(re-matches pattern (.getName ^File %))))
+
+(defn secret-from-line [s]
+  (-> s (clojure.string/replace #"\$secret[0-9] = " "") (clojure.string/replace #";" "") (read-string)))
+
+(defn get-secrets []
+  (let [files (find-files "resources/challenge10/versions" (re-pattern (str ".*?" "script\\.php")))]
+    (into {} (doall (map (fn [file]
+                            (with-open [rdr (clojure.java.io/reader file)]
+                              (let [lines (line-seq rdr)
+                                    secrets (map secret-from-line [(nth lines 6) (nth lines 7)])
+                                    date (clojure.string/replace (.getName file) #"\.script\.php" "")]
+                                [date secrets]))) files)))))
+
+(def secrets (get-secrets))
+
 
 (defn solve-case-date [date user {:keys [hash]}]
-  (if-let [result (call-script (print-date date) user hash)]
-    (let [explode (clojure.string/split (:out result) #"\s")]
-      {:password (get explode 0) :hash (get explode 1)})))
+  (let [[secret1 secret2] (get secrets (print-date date))]
+    (php-implementation secret1 secret2 user hash)))
 
 (defn solve-case [{:keys [user dates] :as case}]
   (reduce (fn [acc date] (solve-case-date date user acc)) nil dates))
 
-(def case-idx (atom 0))
-
-(defn process-case [case]
-  (swap! case-idx inc)
-  (println "processing case " @case-idx)
+(defn process-case [idx case]
   (let [result (solve-case case)]
-    (str "Case #" @case-idx ": " (:password result))))
+    (println "processing case " (inc idx) result)
+    (str "Case #" (inc idx) ": " (:password result))))
 
 (defn process-dates [dates]
   (apply concat (map (fn [i]
@@ -65,7 +117,5 @@
   (with-open [rdr (clojure.java.io/reader input)]
     (doall
       (let [lines (process-lines (vec (drop 1 (line-seq rdr))))]
-        ;; using println with pmap is a recipe for garbled output,
-        ;; but i did not care in this case (performance > perfect console output)
-        (spit output (clojure.string/join "\n" (pmap process-case lines)))
+        (spit output (clojure.string/join "\n" (map-indexed process-case lines)))
         ))))
