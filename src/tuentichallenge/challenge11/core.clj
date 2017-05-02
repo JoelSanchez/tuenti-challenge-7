@@ -17,9 +17,9 @@
 (defn map-vals [m f]
   (into {} (for [[k v] m] [k (f v)])))
 
-(defn maybe-println [& args]
-  (if false
-  (apply println args)))
+(defn debug [function & args]
+  (if true
+  (apply function args)))
 
 (defn remove-keys [pred m]
   (select-keys m (filter (complement pred) (keys m))))
@@ -68,10 +68,10 @@
   (map (partial color-cost problem galaxy) colors))
 
 ;; Set de colores requeridos para un wormhole
-(defn wormhole-colors [problem wormhole]
-  (let [subcolors (get-in problem [:colors (:color wormhole)])]
+(defn expand-color [problem color]
+  (let [subcolors (get-in problem [:colors color])]
     (if (empty? subcolors)
-      #{(:color wormhole)}
+      #{color}
       (set subcolors))))
 
 (defn wormhole-is-reachable [problem colors wormhole]
@@ -87,26 +87,27 @@
 (defn only-unused-cost-wormholes [problem wormholes unused-colors]
   (p :only-unused-cost-wormholes
   (->> wormholes
-    (filter (fn [[k wormhole]] (clojure.set/subset? (set (wormhole-colors problem wormhole)) (set (keys unused-colors)))))
+    (filter (fn [[k wormhole]] (clojure.set/subset? (set (expand-color problem (:color wormhole))) (set (keys unused-colors)))))
     )))
-
 
 (defn merge-min-costs [a b]
   (if (< (:cost a) (:cost b)) a b))
 
+(defn galaxy-colors [problem galaxy]
+  (get-in problem [:galaxies galaxy]))
 
 (def c (atom 0))
 (def unprocessed-wormholes (atom {}))
 
 ;; Obtener soluciones directas a partir de una galaxia, un estado y un coste máximo
-(defn direct-paths* [problem solutions galaxy colors unused-colors acc-cost]
-  (println)
-  (println "direct-paths, galaxy" galaxy "colors" colors "unused-colors" unused-colors "acc-cost" acc-cost)
+(defn direct-paths* [problem galaxy colors unused-colors acc-cost]
+  (debug println)
+  (debug println "direct-paths, galaxy" galaxy "colors" colors "unused-colors" unused-colors "acc-cost" acc-cost)
   ;; Obtener los colores en este punto
   ;; Obtener los wormholes posibles, por cada uno guardar la galaxia, el coste y el state en el listado de soluciones
   ;; Por cada galaxia directa desde las soluciones encontradas, obtener los posibles wormholes y guardar como solución la conexión más pequeña para cada galaxia target
   ;;   (Detener el proceso si se vuelve a un nodo que ya es una solución)
-  (let [galaxy-colors (let [a (get-in problem [:galaxies galaxy])] (maybe-println "galaxy-colors" a) a)
+  (let [galaxy-colors (let [a (galaxy-colors problem galaxy)] (debug println "galaxy-colors" a) a)
         available-colors (p :available-colors (clojure.set/union colors (keys galaxy-colors)))
         wormholes (get @unprocessed-wormholes galaxy)
         ;a (println "the wms" wormholes)
@@ -114,9 +115,9 @@
         ;a (println "reach" reachable-wormholes)
         unused-cost-wormholes (only-unused-cost-wormholes problem wormholes unused-colors)
         merged-wormholes (merge {} reachable-wormholes unused-cost-wormholes)
-        a (println "merged" merged-wormholes)
-        new-solutions (p :main-reducer (reduce (fn [acc [wh-key wormhole]]
-                                (println "reducing" @c wormhole)
+        a (debug println "merged" merged-wormholes)
+        solutions (p :main-reducer (reduce (fn [acc [wh-key wormhole]]
+                                (debug println "reducing" @c wormhole acc)
                                 (swap! c inc)
                                 ;(println ": " @c galaxy wormhole)
                                 (if true
@@ -127,7 +128,7 @@
                                      {;; Colores acumulados, ya que el color del wormhole se cancela
                                       :colors colors
                                       ;; Están sin usar los colores sin usar anteriores + los de la galaxia - los colores del wormhole
-                                      :unused-colors (p :merge-unused (merge unused-colors (apply dissoc galaxy-colors (wormhole-colors problem wormhole))))
+                                      :unused-colors (p :merge-unused (merge unused-colors (apply dissoc galaxy-colors (expand-color problem (:color wormhole)))))
                                       ;; Asociar coste base
                                       :cost acc-cost}
 
@@ -137,31 +138,32 @@
                                       ;; El proceso es el mismo si es :is-unused-cost, la única diferencia es que el código ha podido entender
                                       ;; que el wormhole es alcanzable aunque no sea de forma directa
                                       ((fn [solution]
-                                        (let [wh-colors (wormhole-colors problem wormhole)]
+                                        (debug println "solution" solution)
+                                        (let [wh-colors (expand-color problem (:color wormhole))]
                                           (reduce (fn [solution wh-color] 
-                                            (let [galaxy-cost (or (color-cost problem galaxy wh-color) 0)
+                                            (let [galaxy-cost (or (color-cost problem galaxy (:color wormhole)) 0)
                                                   unused-cost (or (get unused-colors wh-color) 0)]
-                                              (maybe-println "processing wh-color" wh-color "galaxy-cost" galaxy-cost "unused-cost" unused-cost)
+                                              (debug println "processing wh-color" wh-color "galaxy-cost" galaxy-cost "unused-cost" unused-cost)
                                               (cond
                                                 ;; Si ya se tiene este color, no hay nada que pagar
                                                 (contains? colors wh-color)
-                                                  (do (maybe-println "nothing to pay")
+                                                  (do (debug println "nothing to pay")
                                                       solution)
                                                 ;; Si no hay coste de galaxia, es porque hay que cogerlo de unused-costs
                                                 (zero? galaxy-cost)
-                                                  (do (maybe-println "picking from unused-costs")
+                                                  (do (debug println "picking from unused-costs")
                                                   (-> solution
                                                       (update :cost + unused-cost)
                                                       (update :unused-colors dissoc wh-color)))
                                                 ;; Si hay un coste de galaxia pero unused-cost es inferior, intercambiarlos
                                                 (and (> unused-cost 0) (> galaxy-cost unused-cost))
-                                                  (do (maybe-println "using unused cost instead of galaxy cost")
+                                                  (do (debug println "using unused cost instead of galaxy cost")
                                                   (-> solution
                                                       (update :cost + unused-cost)
                                                       (assoc-in [:unused-colors wh-color] galaxy-cost)))
                                                 ;; De lo contrario usar el coste de galaxia
                                                 :else
-                                                  (do (maybe-println "using galaxy cost")
+                                                  (do (debug println "using galaxy cost")
                                                   (-> solution
                                                       (update :cost + galaxy-cost)))
                                                 )))
@@ -171,34 +173,35 @@
                                       ))))) {} merged-wormholes))
         a (swap! unprocessed-wormholes update galaxy (fn [i] (apply dissoc i (keys merged-wormholes))))
         ;d (println "Processed ")
-        a (println "New solutions" new-solutions)
+        a (debug println "solutions" solutions)
         ;b (println "Unprocessed:" (get-in problem [:unprocessed-wormholes]))
         ;c (println "The keys and galaxy" (keys merged-wormholes) galaxy)
-        all-solutions (reduce 
-                        (fn [acc [other-galaxy solution]]
-                          (println "calling " other-galaxy "from " galaxy)
-                          (if (> (count (get @unprocessed-wormholes other-galaxy)) 0)
-                            (merge-with merge-min-costs
-                              acc
-                              (direct-paths* problem acc other-galaxy (:colors solution) (:unused-colors solution) (:cost solution)))
-                            acc)
-                          )
-                        (merge-with merge-min-costs solutions new-solutions)
-                        new-solutions)]
-    (merge-with merge-min-costs solutions all-solutions)))
+        ]
+    solutions))
 
 (defn direct-paths [problem]
   (reset! c 0)
   (reset! unprocessed-wormholes (:wormholes problem))
-  (println "the count" (count @unprocessed-wormholes))
-  (direct-paths* problem {} 0 #{} {} 0))
+  (loop [solutions {} calls {0 {:colors #{} :unused-colors {} :cost 0}}]
+    ; Hijos directos de cada galaxia solucionada
+    (let [new-calls (reduce
+                      (fn [acc [call-galaxy call]]
+                        (if (> (count (get @unprocessed-wormholes call-galaxy)) 0)
+                          (let [result (direct-paths* problem call-galaxy (:colors call) (:unused-colors call) (:cost call))]
+                            (merge-with merge-min-costs acc result))))
+                      {} calls)]
+      (if (> (count new-calls) 0)
+        (recur (merge-with merge-min-costs solutions new-calls) new-calls)
+        (merge-with merge-min-costs solutions new-calls))
+    )
+))
 
 ;; build a graph
 ;; find direct minimal paths
 (defn solve-case* [problem]
   (let [direct-paths (direct-paths problem)]
-    (println "-- DIRECT PATHS --")
-    (clojure.pprint/pprint direct-paths)
+    (debug println "-- DIRECT PATHS --")
+    (debug clojure.pprint/pprint direct-paths)
     (map (fn [k]
       (if (get direct-paths k)
         (:cost (get direct-paths k))
@@ -209,12 +212,12 @@
 
 
 (defn solve-case [idx case]
-  (if-not (= idx 16)
+  (if-not (= idx 26)
     nil
     (do
     (println "solving case " idx)
-    (clojure.pprint/pprint case)
-    (str "Case #" (inc idx) ": " "0 " (clojure.string/join " " (profile {} (let [a (solve-case* case)] (clojure.pprint/pprint a) a )))))))
+    (debug clojure.pprint/pprint case)
+    (str "Case #" (inc idx) ": " "0 " (clojure.string/join " " (profile {} (let [a (solve-case* case)] (debug clojure.pprint/pprint a) a )))))))
 
 
 
