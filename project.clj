@@ -10,6 +10,7 @@
                  [com.gearswithingears/async-sockets "0.1.0"]
                  [aysylu/loom "1.0.0"]
                  [clj-time "0.13.0"]
+                 [com.taoensso/tufte "1.1.1"] 
                  [org.clojure/tools.trace "0.7.9"]]
   :repl-options {:init-ns user}
   :jvm-opts ["-Xmx6g" "-Xms6g" "-XX:-OmitStackTraceInFastThrow"] 
