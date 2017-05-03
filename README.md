@@ -8,13 +8,3 @@ Number 5 is actually a beginning for the challenge 14, because I did a port scan
 
 Number 11 is a disaster and did not pass the test case, please don't look at it. This is actually solved by using [Dijkstra's algorithm](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm) and a [hypergraph](https://en.wikipedia.org/wiki/Hypergraph), as said by Tuenti's engineering team.
 
-## Usage
-
-FIXME
-
-## License
-
-Copyright © 2017 FIXME
-
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
