@@ -53,20 +53,6 @@
             4 {"Red" 10, "Green" 10}},
            :colors {"Red" (), "Green" (), "Blue" (), "Yellow" ("Red" "Green")}})
 
-(defn check-color [problem colors color]
-  (p :check-color
-  (let [colors (set colors)
-        info (get-in problem [:colors color])]
-    (if (> (count info) 0)
-      (or (contains? colors color) (clojure.set/subset? (set info) colors))
-      (contains? colors color)))))
-
-(defn color-cost [problem galaxy color]
-  (get-in problem [:galaxies galaxy color]))
-
-(defn color-costs [problem galaxy colors]
-  (map (partial color-cost problem galaxy) colors))
-
 ;; Set de colores requeridos para un wormhole
 (defn expand-color [problem color]
   (let [subcolors (get-in problem [:colors color])]
@@ -74,7 +60,33 @@
       #{color}
       (set subcolors))))
 
+(defn expand-colors [problem colors]
+  (apply clojure.set/union  (map (partial expand-color problem) colors)))
+
+(defn check-color-1 [problem colors color]
+  ;; o lo contiene o lo contiene la versión expandida
+  (or (contains? colors color) (contains? (expand-colors problem colors) color)))
+
+(defn check-color [problem colors color]
+  ;; color es un subcomponente de uno de los colors
+  ;; no se está teniendo en cuenta
+  (p :check-color
+  (let [colors (set colors)
+        info (get-in problem [:colors color])]
+    (if (> (count info) 0)
+      ;; color es un color padre y nosotros tenemos los subcomponentes
+      (or (contains? colors color) (clojure.set/subset? (set info) colors))
+      ;; color es un color simple y nosotros lo tenemos, o bien es un color simple y uno de nuestros colores lo tiene como subcomponente
+      (check-color-1 problem colors color)))))
+
+(defn color-cost [problem galaxy color]
+  (get-in problem [:galaxies galaxy color]))
+
+(defn color-costs [problem galaxy colors]
+  (map (partial color-cost problem galaxy) colors))
+
 (defn wormhole-is-reachable [problem colors wormhole]
+  (println "is wormhole reachable" wormhole (check-color problem colors (:color wormhole)))
   (check-color problem colors (:color wormhole)))
 
 ;; wormholes accesibles de forma directa
@@ -98,6 +110,37 @@
 
 (def c (atom 0))
 (def unprocessed-wormholes (atom {}))
+
+(defn multiple-color-cost [problem solution wormhole galaxy]
+  (debug println "-- multiple color cost --")
+  (let [colors (expand-color problem (:color wormhole))]
+  (reduce (fn [solution color] 
+    (let [cost (or (get (:unused-colors solution) color) 0)]
+      (debug println "processing color" color "cost" cost)
+      (if (> cost 0)
+        (-> solution
+          (update :cost + cost)
+          (assoc :valid-cost true)
+          (update :unused-colors dissoc color))
+        (-> solution
+         (assoc :valid-cost false))
+        )))
+    (-> solution (assoc :valid-cost false))
+    colors)
+  ))
+
+(defn single-color-cost [problem solution wormhole galaxy]
+  (debug println "-- single color cost --")
+  (let [color (:color wormhole)
+        cost (or (get (:unused-colors solution) color) 0)]
+     (debug println "processing color" color "cost" cost)
+    (if (> cost 0)
+      (-> solution
+          (update :cost + cost)
+          (assoc :valid-cost true)
+          (update :unused-colors dissoc color))
+      (-> solution
+         (assoc :valid-cost false)))))
 
 ;; Obtener soluciones directas a partir de una galaxia, un estado y un coste máximo
 (defn direct-paths* [problem galaxy unused-colors acc-cost]
@@ -125,8 +168,8 @@
                                   (do
                                   (assoc acc (:target wormhole)
                                     (-> 
-                                     {;; Están sin usar los colores sin usar anteriores + los de la galaxia - los colores del wormhole
-                                      :unused-colors (p :merge-unused (merge unused-colors (apply dissoc galaxy-colors (expand-color problem (:color wormhole)))))
+                                     {;; Colores disponibles para cálculo de coste = colores disponibles + colores de la galaxia (merged with min)
+                                      :unused-colors (merge-with min unused-colors galaxy-colors)
                                       ;; Asociar coste base
                                       :cost acc-cost}
 
@@ -137,32 +180,17 @@
                                       ;; que el wormhole es alcanzable aunque no sea de forma directa
                                       ((fn [solution]
                                         (debug println "solution" solution)
-                                        (let [wh-colors (expand-color problem (:color wormhole))]
-                                          (reduce (fn [solution wh-color] 
-                                            (let [galaxy-cost (or (color-cost problem galaxy wh-color) 0)
-                                                  unused-cost (or (get unused-colors wh-color) 0)]
-                                              (debug println "processing wh-color" wh-color "galaxy-cost" galaxy-cost "unused-cost" unused-cost)
-                                              (cond
-                                                (zero? galaxy-cost)
-                                                  (do (debug println "picking from unused-costs")
-                                                  (-> solution
-                                                      (update :cost + unused-cost)
-                                                      (update :unused-colors dissoc wh-color)))
-                                                ;; Si hay un coste de galaxia pero unused-cost es inferior, intercambiarlos
-                                                (and (> unused-cost 0) (> galaxy-cost unused-cost))
-                                                  (do (debug println "using unused cost instead of galaxy cost")
-                                                  (-> solution
-                                                      (update :cost + unused-cost)
-                                                      (assoc-in [:unused-colors wh-color] galaxy-cost)))
-                                                ;; De lo contrario usar el coste de galaxia
-                                                :else
-                                                  (do (debug println "using galaxy cost")
-                                                  (-> solution
-                                                      (update :cost + galaxy-cost)))
-                                                )))
-                                            solution
-                                            wh-colors)
-                                          )))
+                                        (let [single-color-cost (single-color-cost problem solution wormhole galaxy)
+                                              multiple-color-cost (multiple-color-cost problem solution wormhole galaxy)]
+                                          (cond
+                                            (and (:valid-cost single-color-cost) (:valid-cost multiple-color-cost))
+                                              (if (> (:cost single-color-cost) (:cost multiple-color-cost))
+                                                (trace "using multiple color cost" multiple-color-cost)
+                                                (trace "using single color cost" single-color-cost))
+                                            (:valid-cost single-color-cost)
+                                              (trace "usign single color cost" single-color-cost)
+                                            :else
+                                            (trace "using multiple color cost" multiple-color-cost)))))
                                       ))))) {} merged-wormholes))
         a (swap! unprocessed-wormholes update galaxy (fn [i] (apply dissoc i (keys merged-wormholes))))
         ;d (println "Processed ")
@@ -205,7 +233,7 @@
 
 
 (defn solve-case [idx case]
-  (if-not true
+  (if-not (= idx 26)
     nil
     (do
     (println "solving case " idx)

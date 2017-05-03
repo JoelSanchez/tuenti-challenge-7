@@ -1,0 +1,85 @@
+{:wormholes
+ {0
+  {G__226640 {:color "Red", :target 4},
+   G__226641 {:color "Green", :target 10},
+   G__226666 {:color "Purple", :target 12},
+   G__226672 {:color "Blue", :target 12}},
+  7
+  {G__226642 {:color "Blue", :target 2},
+   G__226649 {:color "Blue", :target 12},
+   G__226654 {:color "Purple", :target 8},
+   G__226676 {:color "Red", :target 5}},
+  1
+  {G__226639 {:color "Red", :target 0},
+   G__226644 {:color "Red", :target 6},
+   G__226646 {:color "Red", :target 9},
+   G__226655 {:color "Cyan", :target 0},
+   G__226679 {:color "Cyan", :target 2}},
+  4 {G__226665 {:color "Green", :target 9}},
+  6
+  {G__226662 {:color "Green", :target 4},
+   G__226675 {:color "Purple", :target 3},
+   G__226678 {:color "Red", :target 3}},
+  3
+  {G__226635 {:color "Purple", :target 12},
+   G__226656 {:color "Blue", :target 0}},
+  12
+  {G__226636 {:color "Purple", :target 10},
+   G__226653 {:color "Purple", :target 2},
+   G__226660 {:color "Red", :target 10},
+   G__226661 {:color "Cyan", :target 5},
+   G__226681 {:color "Cyan", :target 3}},
+  2
+  {G__226645 {:color "Blue", :target 0},
+   G__226651 {:color "Blue", :target 8}},
+  11
+  {G__226637 {:color "Green", :target 5},
+   G__226647 {:color "Red", :target 5},
+   G__226658 {:color "Blue", :target 7},
+   G__226677 {:color "Purple", :target 12}},
+  9
+  {G__226634 {:color "Green", :target 7},
+   G__226638 {:color "Blue", :target 2},
+   G__226674 {:color "Green", :target 12}},
+  5
+  {G__226652 {:color "Blue", :target 1},
+   G__226664 {:color "Blue", :target 9},
+   G__226668 {:color "Green", :target 1},
+   G__226670 {:color "Purple", :target 11},
+   G__226671 {:color "Cyan", :target 9}},
+  10
+  {G__226643 {:color "Purple", :target 3},
+   G__226648 {:color "Blue", :target 0},
+   G__226650 {:color "Red", :target 3},
+   G__226663 {:color "Purple", :target 6},
+   G__226667 {:color "Cyan", :target 2},
+   G__226669 {:color "Purple", :target 1},
+   G__226680 {:color "Blue", :target 4},
+   G__226682 {:color "Red", :target 6}},
+  8
+  {G__226657 {:color "Purple", :target 0},
+   G__226659 {:color "Red", :target 11},
+   G__226673 {:color "Red", :target 0}}},
+ :galaxies
+ {0 {"Purple" 29},
+  7 {"Red" 47},
+  1 {"Purple" 39},
+  4 {"Blue" 29},
+  6 {"Red" 39},
+  3 {"Purple" 33},
+  12 {"Cyan" 42},
+  2 {"Blue" 39},
+  11 {"Cyan" 20},
+  9 {"Purple" 35},
+  5 {"Blue" 37},
+  10 {"Green" 15},
+  8 {"Cyan" 39}},
+ :colors
+ {"Red" (),
+  "Green" (),
+  "Blue" (),
+  "Purple" ("Red" "Blue"),
+  "Cyan" ("Green" "Blue")}}
+
+
+  
